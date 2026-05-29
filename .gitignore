@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# local databases
+*.sqlite3
+
+# local env files
+.env
+.env.local
+
+# macOS system files
+.DS_Store
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
