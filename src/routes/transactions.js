@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
 
   try {
     let query = db('transactions')
+      .where('transactions.user_id', req.user.id)
       .select('transactions.*', 'categories.name as category_name', 'categories.color as category_color', 'categories.icon as category_icon', 'investments.goal_id as linked_goal_id', 'goals.name as linked_goal_name')
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
       .leftJoin('investments', 'transactions.id', 'investments.transaction_id')
@@ -66,6 +67,7 @@ router.get('/:id', async (req, res) => {
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
       .leftJoin('investments', 'transactions.id', 'investments.transaction_id')
       .where('transactions.id', id)
+      .andWhere('transactions.user_id', req.user.id)
       .first();
 
     if (!transaction) {
@@ -99,18 +101,22 @@ router.post('/', async (req, res) => {
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         location_name: location_name || null,
-        notes: notes || null
+        notes: notes || null,
+        user_id: req.user.id
       });
       newTransactionId = id;
 
-      // If linking to a goal as an investment, create the allocation
+      // If linking to a goal as an investment, verify ownership and create the allocation
       if (goal_id) {
-        await trx('investments').insert({
-          transaction_id: newTransactionId,
-          goal_id: parseInt(goal_id),
-          allocated_amount: parseFloat(amount),
-          allocated_date: date
-        });
+        const goal = await trx('goals').where({ id: goal_id, user_id: req.user.id }).first();
+        if (goal) {
+          await trx('investments').insert({
+            transaction_id: newTransactionId,
+            goal_id: parseInt(goal_id),
+            allocated_amount: parseFloat(amount),
+            allocated_date: date
+          });
+        }
       }
     });
 
@@ -139,8 +145,8 @@ router.put('/:id', async (req, res) => {
   const { title, amount, type, date, category_id, latitude, longitude, location_name, notes, goal_id } = req.body;
 
   try {
-    // 1. Fetch current transaction and its investment link
-    const oldTx = await db('transactions').where('id', id).first();
+    // 1. Fetch current transaction and its investment link (ensure ownership)
+    const oldTx = await db('transactions').where({ id, user_id: req.user.id }).first();
     if (!oldTx) {
       return res.status(404).json({ error: 'Transaction not found.' });
     }
@@ -170,22 +176,26 @@ router.put('/:id', async (req, res) => {
       // Handle linked goal investment updates
       if (goal_id !== undefined) {
         if (goal_id) {
-          // If goal was already linked, update it; otherwise insert new link
-          if (oldInvestment) {
-            await trx('investments')
-              .where('transaction_id', id)
-              .update({
+          // Verify goal ownership
+          const goal = await trx('goals').where({ id: goal_id, user_id: req.user.id }).first();
+          if (goal) {
+            // If goal was already linked, update it; otherwise insert new link
+            if (oldInvestment) {
+              await trx('investments')
+                .where('transaction_id', id)
+                .update({
+                  goal_id: parseInt(goal_id),
+                  allocated_amount: finalAmount,
+                  allocated_date: finalDate
+                });
+            } else {
+              await trx('investments').insert({
+                transaction_id: id,
                 goal_id: parseInt(goal_id),
                 allocated_amount: finalAmount,
                 allocated_date: finalDate
               });
-          } else {
-            await trx('investments').insert({
-              transaction_id: id,
-              goal_id: parseInt(goal_id),
-              allocated_amount: finalAmount,
-              allocated_date: finalDate
-            });
+            }
           }
         } else {
           // Explicitly unlinked: delete investment link
@@ -227,7 +237,7 @@ router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const tx = await db('transactions').where('id', id).first();
+    const tx = await db('transactions').where({ id, user_id: req.user.id }).first();
     if (!tx) {
       return res.status(404).json({ error: 'Transaction not found.' });
     }

@@ -4,10 +4,12 @@ const cors = require('cors');
 const { initDb } = require('./src/db/db');
 
 // Import routes
+const authRouter = require('./src/routes/auth');
 const categoriesRouter = require('./src/routes/categories');
 const transactionsRouter = require('./src/routes/transactions');
 const goalsRouter = require('./src/routes/goals');
 const analyticsRouter = require('./src/routes/analytics');
+const { requireAuth } = require('./src/middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -17,10 +19,11 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api/categories', categoriesRouter);
-app.use('/api/transactions', transactionsRouter);
-app.use('/api/goals', goalsRouter);
-app.use('/api/analytics', analyticsRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/categories', requireAuth, categoriesRouter);
+app.use('/api/transactions', requireAuth, transactionsRouter);
+app.use('/api/goals', requireAuth, goalsRouter);
+app.use('/api/analytics', requireAuth, analyticsRouter);
 
 // Health Check
 app.get('/health', (req, res) => {

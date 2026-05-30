@@ -5,7 +5,11 @@ const { db } = require('../db/db');
 // GET all categories
 router.get('/', async (req, res) => {
   try {
-    const categories = await db('categories').select('*').orderBy('id', 'asc');
+    const categories = await db('categories')
+      .whereNull('user_id')
+      .orWhere('user_id', req.user.id)
+      .select('*')
+      .orderBy('id', 'asc');
     res.json(categories);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -25,7 +29,8 @@ router.post('/', async (req, res) => {
       name,
       color,
       icon,
-      is_custom: true
+      is_custom: true,
+      user_id: req.user.id
     });
     
     const newCategory = await db('categories').where('id', id).first();

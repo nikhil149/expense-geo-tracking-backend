@@ -8,10 +8,11 @@ router.get('/spending-by-category', async (req, res) => {
 
   try {
     let query = db('transactions')
+      .where('transactions.user_id', req.user.id)
+      .andWhere('transactions.type', 'expense') // standard spending only
       .select('categories.id as category_id', 'categories.name as category_name', 'categories.color as category_color', 'categories.icon as category_icon')
       .sum('transactions.amount as total_amount')
-      .join('categories', 'transactions.category_id', 'categories.id')
-      .where('transactions.type', 'expense'); // standard spending only
+      .join('categories', 'transactions.category_id', 'categories.id');
 
     if (startDate) {
       query = query.where('transactions.date', '>=', startDate);
@@ -37,6 +38,7 @@ router.get('/spending-locations', async (req, res) => {
 
   try {
     let query = db('transactions')
+      .where('transactions.user_id', req.user.id)
       .select('transactions.id', 'transactions.title', 'transactions.amount', 'transactions.type', 'transactions.date', 'transactions.latitude', 'transactions.longitude', 'transactions.location_name', 'categories.name as category_name', 'categories.color as category_color', 'categories.icon as category_icon')
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
       .whereNotNull('transactions.latitude')
@@ -65,6 +67,7 @@ router.get('/spending-locations', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const aggregates = await db('transactions')
+      .where('transactions.user_id', req.user.id)
       .select('type')
       .sum('amount as total')
       .groupBy('type');

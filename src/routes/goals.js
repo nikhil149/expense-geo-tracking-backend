@@ -5,7 +5,10 @@ const { db } = require('../db/db');
 // GET all goals
 router.get('/', async (req, res) => {
   try {
-    const goals = await db('goals').select('*').orderBy('id', 'asc');
+    const goals = await db('goals')
+      .where('user_id', req.user.id)
+      .select('*')
+      .orderBy('id', 'asc');
     res.json(goals);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -16,7 +19,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const goal = await db('goals').where('id', id).first();
+    const goal = await db('goals').where({ id, user_id: req.user.id }).first();
     if (!goal) {
       return res.status(404).json({ error: 'Savings goal not found.' });
     }
@@ -26,6 +29,7 @@ router.get('/:id', async (req, res) => {
       .select('investments.*', 'transactions.title as transaction_title', 'transactions.amount as transaction_amount', 'transactions.type as transaction_type')
       .join('transactions', 'investments.transaction_id', 'transactions.id')
       .where('investments.goal_id', id)
+      .andWhere('transactions.user_id', req.user.id)
       .orderBy('investments.allocated_date', 'desc');
 
     res.json({
@@ -52,7 +56,8 @@ router.post('/', async (req, res) => {
       current_amount: 0.00,
       target_date: target_date || null,
       color: color || '#8B5CF6', // Default accent violet
-      icon: icon || 'target'
+      icon: icon || 'target',
+      user_id: req.user.id
     });
 
     const newGoal = await db('goals').where('id', id).first();
@@ -68,13 +73,13 @@ router.put('/:id', async (req, res) => {
   const { name, target_amount, target_date, color, icon } = req.body;
 
   try {
-    const oldGoal = await db('goals').where('id', id).first();
+    const oldGoal = await db('goals').where({ id, user_id: req.user.id }).first();
     if (!oldGoal) {
       return res.status(404).json({ error: 'Savings goal not found.' });
     }
 
     await db('goals')
-      .where('id', id)
+      .where({ id, user_id: req.user.id })
       .update({
         name: name !== undefined ? name : oldGoal.name,
         target_amount: target_amount !== undefined ? parseFloat(target_amount) : oldGoal.target_amount,
@@ -94,12 +99,12 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const goal = await db('goals').where('id', id).first();
+    const goal = await db('goals').where({ id, user_id: req.user.id }).first();
     if (!goal) {
       return res.status(404).json({ error: 'Savings goal not found.' });
     }
 
-    await db('goals').where('id', id).del();
+    await db('goals').where({ id, user_id: req.user.id }).del();
     res.json({ message: 'Savings goal deleted successfully.', id: parseInt(id) });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -2,21 +2,40 @@ const knex = require('knex');
 const config = require('../../knexfile');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+
+const environment = process.env.NODE_ENV || 'development';
+const activeConfig = config[environment] || config.development;
 
 // Initialize database connection
-const db = knex(config.development);
+const db = knex(activeConfig);
 
 // Initialize DB schema and pre-populate seed data if empty
 async function initDb() {
-  console.log('Initializing database schema...');
+  console.log(`Initializing database schema for environment: ${environment}...`);
 
-  // Ensure DB folder exists
-  const dbDir = path.dirname(config.development.connection.filename);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+  // Ensure DB folder exists (only for local development SQLite instances)
+  if (environment === 'development' && activeConfig.connection && activeConfig.connection.filename) {
+    const dbDir = path.dirname(activeConfig.connection.filename);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
   }
 
-  // 1. Create CATEGORIES Table
+  // 1. Create USERS Table
+  const hasUsers = await db.schema.hasTable('users');
+  if (!hasUsers) {
+    await db.schema.createTable('users', (table) => {
+      table.increments('id').primary();
+      table.string('email').notNullable().unique();
+      table.string('password_hash').notNullable();
+      table.string('name').notNullable();
+      table.timestamps(true, true);
+    });
+    console.log('Table "users" created successfully.');
+  }
+
+  // 2. Create CATEGORIES Table
   const hasCategories = await db.schema.hasTable('categories');
   if (!hasCategories) {
     await db.schema.createTable('categories', (table) => {
@@ -25,12 +44,13 @@ async function initDb() {
       table.string('color').notNullable(); // Hex code for Category
       table.string('icon').notNullable();  // Lucide icon name
       table.boolean('is_custom').defaultTo(false);
+      table.integer('user_id').unsigned().references('id').inTable('users').onDelete('CASCADE').nullable();
       table.timestamps(true, true);
     });
     console.log('Table "categories" created successfully.');
   }
 
-  // 2. Create TRANSACTIONS Table
+  // 3. Create TRANSACTIONS Table
   const hasTransactions = await db.schema.hasTable('transactions');
   if (!hasTransactions) {
     await db.schema.createTable('transactions', (table) => {
@@ -44,12 +64,13 @@ async function initDb() {
       table.double('longitude');
       table.string('location_name');
       table.text('notes');
+      table.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
       table.timestamps(true, true);
     });
     console.log('Table "transactions" created successfully.');
   }
 
-  // 3. Create GOALS Table
+  // 4. Create GOALS Table
   const hasGoals = await db.schema.hasTable('goals');
   if (!hasGoals) {
     await db.schema.createTable('goals', (table) => {
@@ -60,12 +81,13 @@ async function initDb() {
       table.datetime('target_date');
       table.string('color');
       table.string('icon');
+      table.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
       table.timestamps(true, true);
     });
     console.log('Table "goals" created successfully.');
   }
 
-  // 4. Create INVESTMENTS Table (Join Table linking transactions/investments to goals)
+  // 5. Create INVESTMENTS Table (Join Table linking transactions/investments to goals)
   const hasInvestments = await db.schema.hasTable('investments');
   if (!hasInvestments) {
     await db.schema.createTable('investments', (table) => {
@@ -81,19 +103,34 @@ async function initDb() {
     console.log('Table "investments" created successfully.');
   }
 
+  // --- Seed Data ---
+
+  // Seed Default User if empty
+  const userCount = await db('users').count('id as count').first();
+  if (parseInt(userCount.count) === 0) {
+    const passwordHash = await bcrypt.hash('password123', 10);
+    await db('users').insert({
+      id: 1,
+      email: 'nikhil@example.com',
+      password_hash: passwordHash,
+      name: 'Nikhil Rachawar'
+    });
+    console.log('Default user "nikhil@example.com" seeded.');
+  }
+
   // Seed Categories if empty
   const categoryCount = await db('categories').count('id as count').first();
   if (parseInt(categoryCount.count) === 0) {
     const defaultCategories = [
-      { name: 'Food & Dining', color: '#EC4899', icon: 'utensils', is_custom: false },
-      { name: 'Transport', color: '#3B82F6', icon: 'car', is_custom: false },
-      { name: 'Housing & Rent', color: '#10B981', icon: 'home', is_custom: false },
-      { name: 'Utilities', color: '#F59E0B', icon: 'zap', is_custom: false },
-      { name: 'Entertainment', color: '#8B5CF6', icon: 'film', is_custom: false },
-      { name: 'Health & Gym', color: '#EF4444', icon: 'heart-pulse', is_custom: false },
-      { name: 'Shopping', color: '#06B6D4', icon: 'shopping-bag', is_custom: false },
-      { name: 'Salary & Income', color: '#10B981', icon: 'trending-up', is_custom: false },
-      { name: 'Investments', color: '#6366F1', icon: 'bar-chart-2', is_custom: false }
+      { name: 'Food & Dining', color: '#EC4899', icon: 'utensils', is_custom: false, user_id: null },
+      { name: 'Transport', color: '#3B82F6', icon: 'car', is_custom: false, user_id: null },
+      { name: 'Housing & Rent', color: '#10B981', icon: 'home', is_custom: false, user_id: null },
+      { name: 'Utilities', color: '#F59E0B', icon: 'zap', is_custom: false, user_id: null },
+      { name: 'Entertainment', color: '#8B5CF6', icon: 'film', is_custom: false, user_id: null },
+      { name: 'Health & Gym', color: '#EF4444', icon: 'heart-pulse', is_custom: false, user_id: null },
+      { name: 'Shopping', color: '#06B6D4', icon: 'shopping-bag', is_custom: false, user_id: null },
+      { name: 'Salary & Income', color: '#10B981', icon: 'trending-up', is_custom: false, user_id: null },
+      { name: 'Investments', color: '#6366F1', icon: 'bar-chart-2', is_custom: false, user_id: null }
     ];
     await db('categories').insert(defaultCategories);
     console.log('Default categories seeded.');
@@ -109,7 +146,8 @@ async function initDb() {
         current_amount: 0, // calculated from investments
         target_date: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(), // 6 months from now
         color: '#8B5CF6',
-        icon: 'plane'
+        icon: 'plane',
+        user_id: 1
       },
       {
         name: 'Tesla Model 3 Deposit',
@@ -117,7 +155,8 @@ async function initDb() {
         current_amount: 0,
         target_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
         color: '#6366F1',
-        icon: 'zap'
+        icon: 'zap',
+        user_id: 1
       },
       {
         name: 'Emergency Nest Egg',
@@ -125,7 +164,8 @@ async function initDb() {
         current_amount: 0,
         target_date: new Date(Date.now() + 500 * 24 * 60 * 60 * 1000).toISOString(),
         color: '#10B981',
-        icon: 'shield'
+        icon: 'shield',
+        user_id: 1
       }
     ];
     await db('goals').insert(defaultGoals);
@@ -139,7 +179,6 @@ async function initDb() {
     const getCatId = (name) => cats.find((c) => c.name === name).id;
 
     // Standard geographical references centered in San Francisco, CA
-    // San Francisco coordinate range: Latitude ~37.75 to ~37.80, Longitude -122.40 to -122.46
     const baseLat = 37.7749;
     const baseLng = -122.4194;
 
@@ -153,7 +192,8 @@ async function initDb() {
         latitude: baseLat + 0.0035,
         longitude: baseLng - 0.0042,
         location_name: 'Blue Bottle Coffee, SOMA',
-        notes: 'Espresso and morning croissant.'
+        notes: 'Espresso and morning croissant.',
+        user_id: 1
       },
       {
         title: 'Safeway Groceries',
@@ -164,7 +204,8 @@ async function initDb() {
         latitude: baseLat - 0.0084,
         longitude: baseLng + 0.0092,
         location_name: 'Safeway, Market St',
-        notes: 'Weekly groceries replenishment.'
+        notes: 'Weekly groceries replenishment.',
+        user_id: 1
       },
       {
         title: 'Monthly Rent',
@@ -175,7 +216,8 @@ async function initDb() {
         latitude: baseLat,
         longitude: baseLng,
         location_name: 'Mission District Apartments',
-        notes: 'May Rent payment.'
+        notes: 'May Rent payment.',
+        user_id: 1
       },
       {
         title: 'Bi-Weekly Paycheck',
@@ -186,7 +228,8 @@ async function initDb() {
         latitude: baseLat + 0.012,
         longitude: baseLng - 0.008,
         location_name: 'TechCorp Headquarters, Downtown SF',
-        notes: 'Regular salary deposit.'
+        notes: 'Regular salary deposit.',
+        user_id: 1
       },
       {
         title: 'Shell Gas Station',
@@ -197,7 +240,8 @@ async function initDb() {
         latitude: baseLat - 0.0062,
         longitude: baseLng - 0.0112,
         location_name: 'Shell Fuel Station, Potrero Hill',
-        notes: 'Filled up the tank.'
+        notes: 'Filled up the tank.',
+        user_id: 1
       },
       {
         title: 'Equinox Fitness Club',
@@ -208,7 +252,8 @@ async function initDb() {
         latitude: baseLat + 0.0055,
         longitude: baseLng - 0.0025,
         location_name: 'Equinox Gym, Union St',
-        notes: 'Monthly membership dues.'
+        notes: 'Monthly membership dues.',
+        user_id: 1
       },
       {
         title: 'CVS Pharmacy',
@@ -219,7 +264,8 @@ async function initDb() {
         latitude: baseLat + 0.0022,
         longitude: baseLng + 0.0035,
         location_name: 'CVS, SOMA',
-        notes: 'Vitamins and medicine.'
+        notes: 'Vitamins and medicine.',
+        user_id: 1
       },
       {
         title: 'Dolores Park Cafe',
@@ -230,7 +276,8 @@ async function initDb() {
         latitude: baseLat - 0.0145,
         longitude: baseLng - 0.0078,
         location_name: 'Dolores Park Cafe, Mission St',
-        notes: 'Brunch with friends.'
+        notes: 'Brunch with friends.',
+        user_id: 1
       },
       {
         title: 'Uber Ride',
@@ -241,7 +288,8 @@ async function initDb() {
         latitude: baseLat + 0.0095,
         longitude: baseLng - 0.0155,
         location_name: 'Marina District Pick-up',
-        notes: 'Late night rideshare home.'
+        notes: 'Late night rideshare home.',
+        user_id: 1
       },
       {
         title: 'AMC Metreon Theater',
@@ -252,7 +300,8 @@ async function initDb() {
         latitude: baseLat + 0.0048,
         longitude: baseLng - 0.0031,
         location_name: 'AMC Metreon, Mission St',
-        notes: 'Movie night: tickets and popcorn.'
+        notes: 'Movie night: tickets and popcorn.',
+        user_id: 1
       },
       {
         title: 'Apple Store purchase',
@@ -263,7 +312,8 @@ async function initDb() {
         latitude: baseLat + 0.0075,
         longitude: baseLng - 0.0055,
         location_name: 'Apple Store, Union Square',
-        notes: 'New MagSafe battery pack.'
+        notes: 'New MagSafe battery pack.',
+        user_id: 1
       },
       {
         title: 'Pacific Gas & Electric',
@@ -274,7 +324,8 @@ async function initDb() {
         latitude: baseLat + 0.0185,
         longitude: baseLng - 0.0012,
         location_name: 'PG&E SF Corporate Center',
-        notes: 'Electricity and heating bill.'
+        notes: 'Electricity and heating bill.',
+        user_id: 1
       },
       // Investments linked to Goals
       {
@@ -286,7 +337,8 @@ async function initDb() {
         latitude: baseLat + 0.002,
         longitude: baseLng - 0.002,
         location_name: 'Charles Schwab Digital Platform',
-        notes: 'Monthly savings auto-transferred to Travel goals.'
+        notes: 'Monthly savings auto-transferred to Travel goals.',
+        user_id: 1
       },
       {
         title: 'Tesla Target Savings',
@@ -297,7 +349,8 @@ async function initDb() {
         latitude: baseLat + 0.002,
         longitude: baseLng - 0.002,
         location_name: 'Fidelity Brokerage Account',
-        notes: 'Allocating index fund gains to Tesla deposit.'
+        notes: 'Allocating index fund gains to Tesla deposit.',
+        user_id: 1
       },
       {
         title: 'Emergency Cache Deposit',
@@ -308,7 +361,8 @@ async function initDb() {
         latitude: baseLat + 0.002,
         longitude: baseLng - 0.002,
         location_name: 'Ally High-Yield Savings Account',
-        notes: 'Safety net growth addition.'
+        notes: 'Safety net growth addition.',
+        user_id: 1
       },
       {
         title: 'Europe Bonus Deposit',
@@ -319,7 +373,8 @@ async function initDb() {
         latitude: baseLat + 0.002,
         longitude: baseLng - 0.002,
         location_name: 'Charles Schwab Digital Platform',
-        notes: 'Additional transfer for Europe fund.'
+        notes: 'Additional transfer for Europe fund.',
+        user_id: 1
       }
     ];
 
