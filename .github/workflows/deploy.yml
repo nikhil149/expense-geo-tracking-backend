@@ -8,7 +8,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   ECR_REPOSITORY: geo-finance-backend
   ECS_CLUSTER: geo-finance-cluster
-  ECS_SERVICE: geo-finance-api-service
+  ECS_SERVICE: geo-finance-api-service-4g4e8k7s
   TASK_FAMILY: geo-finance-api
   CONTAINER_NAME: geo-finance-api
 
