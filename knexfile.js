@@ -1,5 +1,4 @@
 const path = require('path');
-const { Signer } = require('@aws-sdk/rds-signer');
 
 module.exports = {
   development: {
@@ -18,7 +17,7 @@ module.exports = {
   production: {
     client: 'pg',
     connection: () => {
-      let host, port, user, database;
+      let host, port, user, database, password;
       
       // Support for existing full connection strings OR explicit variables
       if (process.env.DATABASE_URL) {
@@ -27,11 +26,13 @@ module.exports = {
         port = parsed.port || '5432';
         user = parsed.username;
         database = parsed.pathname.replace('/', '');
+        password = decodeURIComponent(parsed.password);
       } else {
         host = process.env.DB_HOST;
         port = process.env.DB_PORT || '5432';
         user = process.env.DB_USER;
         database = process.env.DB_NAME;
+        password = process.env.DB_PASSWORD;
       }
 
       return {
@@ -39,19 +40,8 @@ module.exports = {
         port: parseInt(port, 10),
         user,
         database,
+        password,
         ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
-        password: async () => {
-          // Generates a fresh 15-minute token using the AWS SDK
-          // This function is invoked automatically by node-postgres (pg) 
-          // whenever a new database connection is spawned by the pool.
-          const signer = new Signer({
-            region: process.env.AWS_REGION || 'ap-south-1',
-            hostname: host,
-            port: parseInt(port, 10),
-            username: user,
-          });
-          return await signer.getAuthToken();
-        }
       };
     },
     pool: {
