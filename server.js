@@ -25,7 +25,8 @@ app.use('/api/transactions', requireAuth, transactionsRouter);
 app.use('/api/goals', requireAuth, goalsRouter);
 app.use('/api/analytics', requireAuth, analyticsRouter);
 
-// Health Check
+// Health Checks
+app.get('/', (req, res) => res.send('OK'));
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'Geo-Finance Tracker API' });
 });
