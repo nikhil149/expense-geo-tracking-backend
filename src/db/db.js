@@ -103,6 +103,20 @@ async function initDb() {
     console.log('Table "investments" created successfully.');
   }
 
+  // 6. Create PASSWORD_RESETS Table (Stores verification codes for forgot password)
+  const hasPasswordResets = await db.schema.hasTable('password_resets');
+  if (!hasPasswordResets) {
+    await db.schema.createTable('password_resets', (table) => {
+      table.increments('id').primary();
+      table.string('email').notNullable();
+      table.string('code', 6).notNullable();
+      table.datetime('expires_at').notNullable();
+      table.boolean('used').defaultTo(false);
+      table.timestamps(true, true);
+    });
+    console.log('Table "password_resets" created successfully.');
+  }
+
   // --- Seed Data ---
 
   // Seed Default User if empty
