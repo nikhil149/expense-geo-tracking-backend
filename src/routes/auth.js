@@ -26,11 +26,13 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Create user
-    const [userId] = await db('users').insert({
+    const insertedUser = await db('users').insert({
       email: email.toLowerCase(),
       password_hash: passwordHash,
       name
-    });
+    }).returning('id');
+
+    const userId = typeof insertedUser[0] === 'object' ? insertedUser[0].id : insertedUser[0];
 
     // Generate JWT token
     const token = jwt.sign({ id: userId, email }, JWT_SECRET, { expiresIn: '30d' });
@@ -208,6 +210,141 @@ router.post('/delete-account', async (req, res) => {
     res.json({ success: true, message: 'Your account and all associated data have been permanently deleted.' });
   } catch (error) {
     res.status(500).json({ error: 'An internal error occurred while trying to delete the account.' });
+  }
+});
+
+// POST /forgot-password (Send 6-digit verification code via email)
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required.' });
+  }
+
+  try {
+    const user = await db('users').where('email', email.toLowerCase()).first();
+    if (!user) {
+      // Don't reveal if email exists for security
+      return res.json({ success: true, message: 'If this email exists, a verification code has been sent.' });
+    }
+
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+
+    // Invalidate any existing codes for this email
+    await db('password_resets').where('email', email.toLowerCase()).update({ used: true });
+
+    // Store the new code
+    await db('password_resets').insert({
+      email: email.toLowerCase(),
+      code,
+      expires_at: expiresAt,
+      used: false,
+    });
+
+    // Send email using nodemailer
+    const nodemailer = require('nodemailer');
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.SMTP_EMAIL || 'your-email@gmail.com',
+        pass: process.env.SMTP_PASSWORD || 'your-app-password',
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"Geo-Finance Tracker" <${process.env.SMTP_EMAIL || 'noreply@geofinance.app'}>`,
+      to: email.toLowerCase(),
+      subject: 'Password Reset Code - Geo-Finance Tracker',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #1F2937; color: #fff; border-radius: 12px;">
+          <h2 style="color: #8B5CF6; margin-top: 0;">Password Reset</h2>
+          <p style="color: #D1D5DB;">You requested a password reset for your Geo-Finance Tracker account. Use the code below to verify your identity:</p>
+          <div style="background: #111827; padding: 20px; border-radius: 8px; text-align: center; margin: 24px 0;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #8B5CF6;">${code}</span>
+          </div>
+          <p style="color: #9CA3AF; font-size: 13px;">This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true, message: 'If this email exists, a verification code has been sent.' });
+  } catch (error) {
+    console.error('Forgot password error:', error.message);
+    res.status(500).json({ error: 'Failed to send verification code. Please try again.' });
+  }
+});
+
+// POST /verify-code (Verify the 6-digit code)
+router.post('/verify-code', async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email and code are required.' });
+  }
+
+  try {
+    const resetEntry = await db('password_resets')
+      .where('email', email.toLowerCase())
+      .where('code', code)
+      .where('used', false)
+      .orderBy('created_at', 'desc')
+      .first();
+
+    if (!resetEntry) {
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    }
+
+    // Check expiry
+    if (new Date(resetEntry.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+    }
+
+    res.json({ success: true, message: 'Code verified successfully.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /reset-password (Set a new password after code verification)
+router.post('/reset-password', async (req, res) => {
+  const { email, code, newPassword } = req.body;
+
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ error: 'Email, code, and new password are required.' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+
+  try {
+    // Re-verify the code
+    const resetEntry = await db('password_resets')
+      .where('email', email.toLowerCase())
+      .where('code', code)
+      .where('used', false)
+      .orderBy('created_at', 'desc')
+      .first();
+
+    if (!resetEntry || new Date(resetEntry.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update user password
+    await db('users').where('email', email.toLowerCase()).update({ password_hash: passwordHash });
+
+    // Mark code as used
+    await db('password_resets').where('id', resetEntry.id).update({ used: true });
+
+    res.json({ success: true, message: 'Password has been reset successfully. You can now log in.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

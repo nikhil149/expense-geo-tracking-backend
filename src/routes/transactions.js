@@ -92,7 +92,7 @@ router.post('/', async (req, res) => {
 
     // Use a Knex transaction to ensure atomic execution
     await db.transaction(async (trx) => {
-      const [id] = await trx('transactions').insert({
+      const insertedTx = await trx('transactions').insert({
         title,
         amount: parseFloat(amount),
         type,
@@ -103,8 +103,8 @@ router.post('/', async (req, res) => {
         location_name: location_name || null,
         notes: notes || null,
         user_id: req.user.id
-      });
-      newTransactionId = id;
+      }).returning('id');
+      newTransactionId = typeof insertedTx[0] === 'object' ? insertedTx[0].id : insertedTx[0];
 
       // If linking to a goal as an investment, verify ownership and create the allocation
       if (goal_id) {
@@ -115,7 +115,7 @@ router.post('/', async (req, res) => {
             goal_id: parseInt(goal_id),
             allocated_amount: parseFloat(amount),
             allocated_date: date
-          });
+          }).returning('id');
         }
       }
     });
@@ -194,7 +194,7 @@ router.put('/:id', async (req, res) => {
                 goal_id: parseInt(goal_id),
                 allocated_amount: finalAmount,
                 allocated_date: finalDate
-              });
+              }).returning('id');
             }
           }
         } else {

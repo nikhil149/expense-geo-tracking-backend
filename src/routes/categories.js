@@ -25,15 +25,17 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const [id] = await db('categories').insert({
+    const insertedCategory = await db('categories').insert({
       name,
-      color,
-      icon,
+      color: color || '#6B7280',
+      icon: icon || 'HelpCircle',
       is_custom: true,
       user_id: req.user.id
-    });
+    }).returning('id');
     
-    const newCategory = await db('categories').where('id', id).first();
+    const id = typeof insertedCategory[0] === 'object' ? insertedCategory[0].id : insertedCategory[0];
+
+    const newCategory = await db('categories').where({ id }).first();
     res.status(201).json(newCategory);
   } catch (error) {
     // Unique constraint violation check for SQLite

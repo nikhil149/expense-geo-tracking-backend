@@ -50,17 +50,19 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const [id] = await db('goals').insert({
+    const insertedGoal = await db('goals').insert({
       name,
       target_amount: parseFloat(target_amount),
       current_amount: 0.00,
       target_date: target_date || null,
-      color: color || '#8B5CF6', // Default accent violet
-      icon: icon || 'target',
+      color: color || '#8B5CF6',
+      icon: icon || 'Target',
       user_id: req.user.id
-    });
+    }).returning('id');
+    
+    const id = typeof insertedGoal[0] === 'object' ? insertedGoal[0].id : insertedGoal[0];
 
-    const newGoal = await db('goals').where('id', id).first();
+    const newGoal = await db('goals').where({ id }).first();
     res.status(201).json(newGoal);
   } catch (error) {
     res.status(500).json({ error: error.message });
