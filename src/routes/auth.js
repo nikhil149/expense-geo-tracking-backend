@@ -243,32 +243,31 @@ router.post('/forgot-password', async (req, res) => {
       used: false,
     });
 
-    // Send email using nodemailer
-    const nodemailer = require('nodemailer');
+    // Send email using Resend if API key is configured, otherwise log it for dev
+    if (process.env.RESEND_API_KEY) {
+      const { Resend } = require('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.SMTP_EMAIL || 'your-email@gmail.com',
-        pass: process.env.SMTP_PASSWORD || 'your-app-password',
-      },
-    });
-
-    await transporter.sendMail({
-      from: `"Geo-Finance Tracker" <${process.env.SMTP_EMAIL || 'noreply@geofinance.app'}>`,
-      to: email.toLowerCase(),
-      subject: 'Password Reset Code - Geo-Finance Tracker',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #1F2937; color: #fff; border-radius: 12px;">
-          <h2 style="color: #8B5CF6; margin-top: 0;">Password Reset</h2>
-          <p style="color: #D1D5DB;">You requested a password reset for your Geo-Finance Tracker account. Use the code below to verify your identity:</p>
-          <div style="background: #111827; padding: 20px; border-radius: 8px; text-align: center; margin: 24px 0;">
-            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #8B5CF6;">${code}</span>
+      await resend.emails.send({
+        from: 'onboarding@resend.dev',
+        to: email.toLowerCase(),
+        subject: 'Password Reset Code - Geo-Finance Tracker',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #1F2937; color: #fff; border-radius: 12px;">
+            <h2 style="color: #8B5CF6; margin-top: 0;">Password Reset</h2>
+            <p style="color: #D1D5DB;">You requested a password reset for your Geo-Finance Tracker account. Use the code below to verify your identity:</p>
+            <div style="background: #111827; padding: 20px; border-radius: 8px; text-align: center; margin: 24px 0;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #8B5CF6;">${code}</span>
+            </div>
+            <p style="color: #9CA3AF; font-size: 13px;">This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
           </div>
-          <p style="color: #9CA3AF; font-size: 13px;">This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
-        </div>
-      `,
-    });
+        `,
+      });
+    } else {
+      console.log(`\n======================================================`);
+      console.log(`[DEV MODE] Forgot Password Code for ${email}: ${code}`);
+      console.log(`======================================================\n`);
+    }
 
     res.json({ success: true, message: 'If this email exists, a verification code has been sent.' });
   } catch (error) {
