@@ -92,12 +92,27 @@ router.post('/', async (req, res) => {
 
     // Use a Knex transaction to ensure atomic execution
     await db.transaction(async (trx) => {
+      // Auto-assign category from previous transactions with the same store name
+      let resolvedCategoryId = category_id ? parseInt(category_id) : null;
+      if (!resolvedCategoryId && title) {
+        const previousTx = await trx('transactions')
+          .where('user_id', req.user.id)
+          .whereNotNull('category_id')
+          .whereRaw('LOWER(title) = ?', [title.toLowerCase()])
+          .orderBy('date', 'desc')
+          .select('category_id')
+          .first();
+        if (previousTx && previousTx.category_id) {
+          resolvedCategoryId = previousTx.category_id;
+        }
+      }
+
       const insertedTx = await trx('transactions').insert({
         title,
         amount: parseFloat(amount),
         type,
         date,
-        category_id: category_id ? parseInt(category_id) : null,
+        category_id: resolvedCategoryId,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         location_name: location_name || null,
