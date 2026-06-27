@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@aws-sdk/client-sns": "^3.1075.0",
     "@aws-sdk/rds-signer": "^3.1057.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
@@ -21,7 +22,9 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "jest": "^30.4.2",
+    "nodemon": "^3.1.0",
+    "supertest": "^7.2.2"
   },
   "private": true
 }

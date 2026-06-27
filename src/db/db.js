@@ -27,8 +27,7 @@ async function initDb() {
   if (!hasUsers) {
     await db.schema.createTable('users', (table) => {
       table.increments('id').primary();
-      table.string('email').notNullable().unique();
-      table.string('password_hash').notNullable();
+      table.string('phone_number').notNullable().unique();
       table.string('name').notNullable();
       table.timestamps(true, true);
     });
@@ -103,18 +102,17 @@ async function initDb() {
     console.log('Table "investments" created successfully.');
   }
 
-  // 6. Create PASSWORD_RESETS Table (Stores verification codes for forgot password)
-  const hasPasswordResets = await db.schema.hasTable('password_resets');
-  if (!hasPasswordResets) {
-    await db.schema.createTable('password_resets', (table) => {
+  // 6. Create OTPS Table
+  const hasOtps = await db.schema.hasTable('otps');
+  if (!hasOtps) {
+    await db.schema.createTable('otps', (table) => {
       table.increments('id').primary();
-      table.string('email').notNullable();
-      table.string('code', 6).notNullable();
+      table.string('phone_number').notNullable().unique();
+      table.string('otp_code').notNullable();
       table.datetime('expires_at').notNullable();
-      table.boolean('used').defaultTo(false);
       table.timestamps(true, true);
     });
-    console.log('Table "password_resets" created successfully.');
+    console.log('Table "otps" created successfully.');
   }
 
   // --- Seed Data ---
@@ -122,14 +120,12 @@ async function initDb() {
   // Seed Default User if empty
   const userCount = await db('users').count('id as count').first();
   if (parseInt(userCount.count) === 0) {
-    const passwordHash = await bcrypt.hash('password123', 10);
     await db('users').insert({
       id: 1,
-      email: 'nikhil@example.com',
-      password_hash: passwordHash,
+      phone_number: '+1234567890',
       name: 'Nikhil Rachawar'
     });
-    console.log('Default user "nikhil@example.com" seeded.');
+    console.log('Default user "+1234567890" seeded.');
   }
 
   // Seed Categories if empty

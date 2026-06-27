@@ -1,86 +1,92 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const { db } = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
 
+const snsClient = new SNSClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
 const JWT_SECRET = process.env.JWT_SECRET || 'geo-finance-super-secret-key-123!';
 
-// POST /register
-router.post('/register', async (req, res) => {
-  const { email, password, name } = req.body;
-
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Email, password, and name are required.' });
+// POST /send-otp
+router.post('/send-otp', async (req, res) => {
+  const { phone_number } = req.body;
+  if (!phone_number) {
+    return res.status(400).json({ error: 'Phone number is required.' });
   }
 
   try {
-    // Check if email already exists
-    const existingUser = await db('users').where('email', email.toLowerCase()).first();
-    if (existingUser) {
-      return res.status(400).json({ error: 'A user with this email address already exists.' });
+    const otp_code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+    // Upsert into otps table
+    await db('otps')
+      .insert({ phone_number, otp_code, expires_at })
+      .onConflict('phone_number')
+      .merge({ otp_code, expires_at });
+
+    // Send SMS via SNS
+    // If not in a test environment and AWS is configured, send it. For now we will mock if not configured.
+    if (process.env.NODE_ENV !== 'test' && process.env.AWS_REGION) {
+      await snsClient.send(new PublishCommand({
+        PhoneNumber: phone_number,
+        Message: `Your Geo-Finance verification code is: ${otp_code}`,
+        MessageAttributes: {
+          'AWS.SNS.SMS.SMSType': {
+            DataType: 'String',
+            StringValue: 'Transactional'
+          },
+          'AWS.SNS.SMS.SenderID': {
+            DataType: 'String',
+            StringValue: 'GeoFinance'
+          }
+        }
+      }));
+    } else {
+      console.log(`[MOCK SMS] To: ${phone_number}, Code: ${otp_code}`);
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Create user
-    const insertedUser = await db('users').insert({
-      email: email.toLowerCase(),
-      password_hash: passwordHash,
-      name
-    }).returning('id');
-
-    const userId = typeof insertedUser[0] === 'object' ? insertedUser[0].id : insertedUser[0];
-
-    // Generate JWT token
-    const token = jwt.sign({ id: userId, email }, JWT_SECRET, { expiresIn: '30d' });
-
-    res.status(201).json({
-      token,
-      user: {
-        id: userId,
-        email: email.toLowerCase(),
-        name
-      }
-    });
+    res.json({ message: 'OTP sent successfully.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// POST /login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
+// POST /verify-otp
+router.post('/verify-otp', async (req, res) => {
+  const { phone_number, otp_code, name } = req.body;
+  
+  if (!phone_number || !otp_code) {
+    return res.status(400).json({ error: 'Phone number and OTP are required.' });
   }
 
   try {
-    // Find user
-    const user = await db('users').where('email', email.toLowerCase()).first();
+    const otpRecord = await db('otps').where({ phone_number }).first();
+    if (!otpRecord || otpRecord.otp_code !== otp_code || new Date(otpRecord.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Invalid or expired OTP.' });
+    }
+
+    let user = await db('users').where({ phone_number }).first();
+
     if (!user) {
-      return res.status(400).json({ error: 'Invalid email or password.' });
-    }
-
-    // Compare password hash
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid email or password.' });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name
+      if (!name) {
+        return res.status(400).json({ error: 'User does not exist. Please provide a name to register.', isNewUser: true });
       }
+      // Create new user
+      const inserted = await db('users').insert({ phone_number, name }).returning('id');
+      const userId = typeof inserted[0] === 'object' ? inserted[0].id : inserted[0];
+      user = { id: userId, phone_number, name };
+    }
+
+    // Delete OTP
+    await db('otps').where({ phone_number }).del();
+
+    const token = jwt.sign({ id: user.id, phone_number: user.phone_number }, JWT_SECRET, { expiresIn: '30d' });
+
+    res.status(201).json({
+      token,
+      user
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
