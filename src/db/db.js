@@ -32,6 +32,24 @@ async function initDb() {
       table.timestamps(true, true);
     });
     console.log('Table "users" created successfully.');
+  } else {
+    // Migration: Check if legacy email column exists and migrate to phone_number
+    const hasEmail = await db.schema.hasColumn('users', 'email');
+    if (hasEmail) {
+      console.log('Migrating legacy "users" table to phone auth...');
+      await db.schema.alterTable('users', (table) => {
+        table.string('phone_number').unique(); // Allow null temporarily
+      });
+      // Delete old users since they don't have phone numbers
+      await db('users').del();
+      await db.schema.alterTable('users', (table) => {
+        table.dropColumn('email');
+        table.dropColumn('password_hash');
+      });
+      // Note: SQLite doesn't fully support altering column constraints to NOT NULL easily, 
+      // but Knex handles basic drops. Since we deleted the data, any new inserts will require phone_number anyway.
+      console.log('Migration complete.');
+    }
   }
 
   // 2. Create CATEGORIES Table
