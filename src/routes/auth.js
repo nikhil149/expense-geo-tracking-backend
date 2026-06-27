@@ -36,10 +36,6 @@ router.post('/send-otp', async (req, res) => {
           'AWS.SNS.SMS.SMSType': {
             DataType: 'String',
             StringValue: 'Transactional'
-          },
-          'AWS.SNS.SMS.SenderID': {
-            DataType: 'String',
-            StringValue: 'GeoFinance'
           }
         }
       }));
