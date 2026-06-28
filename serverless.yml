@@ -1,0 +1,20 @@
+service: geo-finance-backend
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-south-1
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: ${env:DATABASE_URL, ''}
+    JWT_SECRET: ${env:JWT_SECRET, ''}
+    SMS_PROVIDER: ${env:SMS_PROVIDER, ''}
+    TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID, ''}
+    TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN, ''}
+    TWILIO_VERIFY_SERVICE_SID: ${env:TWILIO_VERIFY_SERVICE_SID, ''}
+
+functions:
+  api:
+    handler: server.handler
+    events:
+      - httpApi: '*'

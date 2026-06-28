@@ -2,10 +2,16 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+const twilio = require('twilio');
 const { db } = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
 
 const snsClient = new SNSClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
+let twilioClient;
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+  twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'geo-finance-super-secret-key-123!';
 
@@ -17,30 +23,42 @@ router.post('/send-otp', async (req, res) => {
   }
 
   try {
-    const otp_code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
-
-    // Upsert into otps table
-    await db('otps')
-      .insert({ phone_number, otp_code, expires_at })
-      .onConflict('phone_number')
-      .merge({ otp_code, expires_at });
-
-    // Send SMS via SNS
-    // If not in a test environment and AWS is configured, send it. For now we will mock if not configured.
-    if (process.env.NODE_ENV !== 'test' && process.env.AWS_REGION) {
-      await snsClient.send(new PublishCommand({
-        PhoneNumber: phone_number,
-        Message: `Your Geo-Finance verification code is: ${otp_code}`,
-        MessageAttributes: {
-          'AWS.SNS.SMS.SMSType': {
-            DataType: 'String',
-            StringValue: 'Transactional'
-          }
-        }
-      }));
+    if (process.env.SMS_PROVIDER === 'twilio') {
+      if (!twilioClient || !process.env.TWILIO_VERIFY_SERVICE_SID) {
+        throw new Error('Twilio is not configured properly.');
+      }
+      if (process.env.NODE_ENV !== 'test') {
+        await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID)
+          .verifications.create({ to: phone_number, channel: 'sms' });
+      } else {
+        console.log(`[MOCK TWILIO SMS] To: ${phone_number}`);
+      }
     } else {
-      console.log(`[MOCK SMS] To: ${phone_number}, Code: ${otp_code}`);
+      // AWS SNS Logic
+      const otp_code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+      // Upsert into otps table
+      await db('otps')
+        .insert({ phone_number, otp_code, expires_at })
+        .onConflict('phone_number')
+        .merge({ otp_code, expires_at });
+
+      // Send SMS via SNS
+      if (process.env.NODE_ENV !== 'test' && process.env.AWS_REGION) {
+        await snsClient.send(new PublishCommand({
+          PhoneNumber: phone_number,
+          Message: `Your Geo-Finance verification code is: ${otp_code}`,
+          MessageAttributes: {
+            'AWS.SNS.SMS.SMSType': {
+              DataType: 'String',
+              StringValue: 'Transactional'
+            }
+          }
+        }));
+      } else {
+        console.log(`[MOCK AWS SMS] To: ${phone_number}, Code: ${otp_code}`);
+      }
     }
 
     res.json({ message: 'OTP sent successfully.' });
@@ -58,9 +76,31 @@ router.post('/verify-otp', async (req, res) => {
   }
 
   try {
-    const otpRecord = await db('otps').where({ phone_number }).first();
-    if (!otpRecord || otpRecord.otp_code !== otp_code || new Date(otpRecord.expires_at) < new Date()) {
-      return res.status(400).json({ error: 'Invalid or expired OTP.' });
+    if (process.env.SMS_PROVIDER === 'twilio') {
+      if (!twilioClient || !process.env.TWILIO_VERIFY_SERVICE_SID) {
+        throw new Error('Twilio is not configured properly.');
+      }
+      if (process.env.NODE_ENV !== 'test') {
+        const check = await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID)
+          .verificationChecks.create({ to: phone_number, code: otp_code });
+        
+        if (check.status !== 'approved') {
+          return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        }
+      } else {
+        // In test env, just accept if code is '123456' for mocking Twilio behavior
+        if (otp_code !== '123456') {
+          return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        }
+      }
+    } else {
+      // AWS SNS Logic
+      const otpRecord = await db('otps').where({ phone_number }).first();
+      if (!otpRecord || otpRecord.otp_code !== otp_code || new Date(otpRecord.expires_at) < new Date()) {
+        return res.status(400).json({ error: 'Invalid or expired OTP.' });
+      }
+      // Delete OTP
+      await db('otps').where({ phone_number }).del();
     }
 
     let user = await db('users').where({ phone_number }).first();
@@ -74,9 +114,6 @@ router.post('/verify-otp', async (req, res) => {
       const userId = typeof inserted[0] === 'object' ? inserted[0].id : inserted[0];
       user = { id: userId, phone_number, name };
     }
-
-    // Delete OTP
-    await db('otps').where({ phone_number }).del();
 
     const token = jwt.sign({ id: user.id, phone_number: user.phone_number }, JWT_SECRET, { expiresIn: '30d' });
 
@@ -131,24 +168,61 @@ router.get('/delete-account', (req, res) => {
         <div id="messageBox" class="alert"></div>
 
         <form id="deleteForm">
-          <div class="input-group">
-            <label>Email Address</label>
-            <input type="email" id="email" required placeholder="you@example.com">
+          <div id="step1">
+            <div class="input-group">
+              <label>Phone Number</label>
+              <input type="text" id="phone" required placeholder="+1234567890">
+            </div>
+            <button type="button" id="sendOtpBtn">Send Verification Code</button>
           </div>
-          <div class="input-group">
-            <label>Password</label>
-            <input type="password" id="password" required placeholder="••••••••">
+          
+          <div id="step2" style="display: none;">
+            <div class="input-group">
+              <label>Verification Code</label>
+              <input type="text" id="code" placeholder="123456">
+            </div>
+            <button type="submit" id="submitBtn">Permanently Delete Account</button>
           </div>
-          <button type="submit" id="submitBtn">Permanently Delete Account</button>
         </form>
       </div>
 
       <script>
+        const phoneInput = document.getElementById('phone');
+        const sendOtpBtn = document.getElementById('sendOtpBtn');
+        const msgBox = document.getElementById('messageBox');
+        
+        sendOtpBtn.addEventListener('click', async () => {
+          const phone_number = phoneInput.value;
+          if (!phone_number) return;
+          sendOtpBtn.disabled = true;
+          sendOtpBtn.innerText = 'Sending...';
+          try {
+            const res = await fetch('/api/auth/send-otp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone_number })
+            });
+            const data = await res.json();
+            if (res.ok) {
+              document.getElementById('step1').style.display = 'none';
+              document.getElementById('step2').style.display = 'block';
+              msgBox.innerText = 'OTP sent! Please check your phone.';
+              msgBox.className = 'alert success';
+            } else {
+              throw new Error(data.error);
+            }
+          } catch (err) {
+            msgBox.innerText = err.message || 'Failed to send OTP.';
+            msgBox.className = 'alert error';
+            sendOtpBtn.disabled = false;
+            sendOtpBtn.innerText = 'Send Verification Code';
+          }
+        });
+
         document.getElementById('deleteForm').addEventListener('submit', async (e) => {
           e.preventDefault();
-          const email = document.getElementById('email').value;
-          const password = document.getElementById('password').value;
-          const msgBox = document.getElementById('messageBox');
+          const phone_number = phoneInput.value;
+          const otp_code = document.getElementById('code').value;
           const btn = document.getElementById('submitBtn');
 
           btn.disabled = true;
@@ -159,7 +233,7 @@ router.get('/delete-account', (req, res) => {
             const res = await fetch('/api/auth/delete-account', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password })
+              body: JSON.stringify({ phone_number, otp_code })
             });
             const data = await res.json();
             
@@ -167,15 +241,12 @@ router.get('/delete-account', (req, res) => {
               msgBox.innerText = data.message;
               msgBox.className = 'alert success';
               document.getElementById('deleteForm').reset();
-              btn.style.display = 'none';
+              document.getElementById('step2').style.display = 'none';
             } else {
-              msgBox.innerText = data.error || 'Failed to delete account.';
-              msgBox.className = 'alert error';
-              btn.disabled = false;
-              btn.innerText = 'Permanently Delete Account';
+              throw new Error(data.error);
             }
           } catch (err) {
-            msgBox.innerText = 'A network error occurred.';
+            msgBox.innerText = err.message || 'Failed to delete account.';
             msgBox.className = 'alert error';
             btn.disabled = false;
             btn.innerText = 'Permanently Delete Account';
@@ -189,21 +260,42 @@ router.get('/delete-account', (req, res) => {
 
 // POST /delete-account (Web-based form submission)
 router.post('/delete-account', async (req, res) => {
-  const { email, password } = req.body;
+  const { phone_number, otp_code } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
+  if (!phone_number || !otp_code) {
+    return res.status(400).json({ error: 'Phone number and OTP are required.' });
   }
 
   try {
-    const user = await db('users').where('email', email.toLowerCase()).first();
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid credentials or account does not exist.' });
+    if (process.env.SMS_PROVIDER === 'twilio') {
+      if (!twilioClient || !process.env.TWILIO_VERIFY_SERVICE_SID) {
+        throw new Error('Twilio is not configured properly.');
+      }
+      if (process.env.NODE_ENV !== 'test') {
+        const check = await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID)
+          .verificationChecks.create({ to: phone_number, code: otp_code });
+        
+        if (check.status !== 'approved') {
+          return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        }
+      } else {
+        if (otp_code !== '123456') {
+          return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        }
+      }
+    } else {
+      // AWS SNS Logic
+      const otpRecord = await db('otps').where({ phone_number }).first();
+      if (!otpRecord || otpRecord.otp_code !== otp_code || new Date(otpRecord.expires_at) < new Date()) {
+        return res.status(400).json({ error: 'Invalid or expired OTP.' });
+      }
+      // Delete OTP
+      await db('otps').where({ phone_number }).del();
     }
 
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid credentials.' });
+    const user = await db('users').where({ phone_number }).first();
+    if (!user) {
+      return res.status(400).json({ error: 'Account does not exist.' });
     }
 
     // ON DELETE CASCADE handles related data

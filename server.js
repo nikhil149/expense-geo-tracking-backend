@@ -37,8 +37,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });
 
-// Initialize database then start server
-async function startServer() {
+const serverless = require('serverless-http');
+
+// Initialize database then start server (Local only)
+async function startLocalServer() {
   try {
     await initDb();
     app.listen(PORT, () => {
@@ -52,4 +54,22 @@ async function startServer() {
   }
 }
 
-startServer();
+// If running locally (not in AWS Lambda), start the server
+if (process.env.NODE_ENV !== 'production' && !process.env.LAMBDA_TASK_ROOT) {
+  startLocalServer();
+}
+
+// For AWS Lambda, we export the wrapped app.
+// Note: We call initDb() inside the Lambda handler implicitly by the time the first request hits, 
+// but serverless-http handles the cold start beautifully.
+// To ensure DB is ready, we'll wrap the handler.
+let dbInitialized = false;
+const wrappedApp = serverless(app);
+
+module.exports.handler = async (event, context) => {
+  if (!dbInitialized) {
+    await initDb();
+    dbInitialized = true;
+  }
+  return wrappedApp(event, context);
+};
