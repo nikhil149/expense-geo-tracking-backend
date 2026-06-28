@@ -35,13 +35,20 @@ module.exports = {
         password = process.env.DB_PASSWORD;
       }
 
+      let ssl = false;
+      if (process.env.DATABASE_SSL === 'true') {
+        ssl = { rejectUnauthorized: false };
+      } else if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('sslmode=require')) {
+        ssl = { rejectUnauthorized: false };
+      }
+
       return {
         host,
         port: parseInt(port, 10),
         user,
         database,
         password,
-        ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        ssl,
       };
     },
     pool: {
