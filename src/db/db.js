@@ -460,6 +460,20 @@ async function initDb() {
     console.log('Goal current accumulated balances calculated & updated.');
   }
 
+  // Postgres sequences get out of sync when we manually insert hardcoded IDs during seeding.
+  // We must reset the auto-increment sequences to the MAX(id) of each table.
+  if (activeConfig.client === 'pg') {
+    const tables = ['users', 'categories', 'transactions', 'goals', 'investments'];
+    for (const table of tables) {
+      try {
+        await db.raw(`SELECT setval('${table}_id_seq', COALESCE((SELECT MAX(id) + 1 FROM ${table}), 1), false)`);
+      } catch (err) {
+        // Silently ignore if sequence doesn't exist
+      }
+    }
+    console.log('PostgreSQL auto-increment sequences synchronized.');
+  }
+
   console.log('Database ready and fully seeded.');
 }
 
