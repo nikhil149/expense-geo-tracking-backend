@@ -61,7 +61,7 @@ if (process.env.NODE_ENV !== 'production' && !process.env.LAMBDA_TASK_ROOT) {
   startLocalServer();
 }
 
-// For AWS Lambda, we export the wrapped app.
+// For AWS Lambda, we export the wrapped app....
 let dbInitialized = false;
 let dbInitError = null;
 const wrappedApp = serverless(app);
