@@ -135,18 +135,7 @@ async function initDb() {
 
   // --- Seed Data ---
 
-  // Seed Default User if empty
-  const userCount = await db('users').count('id as count').first();
-  if (parseInt(userCount.count) === 0) {
-    await db('users').insert({
-      id: 1,
-      phone_number: '+1234567890',
-      name: 'Nikhil Rachawar'
-    });
-    console.log('Default user "+1234567890" seeded.');
-  }
-
-  // Seed Categories if empty
+  // Seed Default Categories if empty (needed in ALL environments)
   const categoryCount = await db('categories').count('id as count').first();
   if (parseInt(categoryCount.count) === 0) {
     const defaultCategories = [
@@ -164,304 +153,117 @@ async function initDb() {
     console.log('Default categories seeded.');
   }
 
-  // Seed Goals if empty
-  const goalCount = await db('goals').count('id as count').first();
-  if (parseInt(goalCount.count) === 0) {
-    const defaultGoals = [
-      {
-        name: 'Europe Vacation Fund',
-        target_amount: 6000.00,
-        current_amount: 0, // calculated from investments
-        target_date: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(), // 6 months from now
-        color: '#8B5CF6',
-        icon: 'plane',
-        user_id: 1
-      },
-      {
-        name: 'Tesla Model 3 Deposit',
-        target_amount: 15000.00,
-        current_amount: 0,
-        target_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
-        color: '#6366F1',
-        icon: 'zap',
-        user_id: 1
-      },
-      {
-        name: 'Emergency Nest Egg',
-        target_amount: 10000.00,
-        current_amount: 0,
-        target_date: new Date(Date.now() + 500 * 24 * 60 * 60 * 1000).toISOString(),
-        color: '#10B981',
-        icon: 'shield',
-        user_id: 1
-      }
-    ];
-    await db('goals').insert(defaultGoals);
-    console.log('Default savings goals seeded.');
-  }
-
-  // Seed Transactions and Investments if empty
-  const transactionCount = await db('transactions').count('id as count').first();
-  if (parseInt(transactionCount.count) === 0) {
-    const cats = await db('categories').select('id', 'name');
-    const getCatId = (name) => cats.find((c) => c.name === name).id;
-
-    // Standard geographical references centered in San Francisco, CA
-    const baseLat = 37.7749;
-    const baseLng = -122.4194;
-
-    const mockTransactions = [
-      {
-        title: 'Blue Bottle Coffee',
-        amount: 8.50,
-        type: 'expense',
-        date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-        category_id: getCatId('Food & Dining'),
-        latitude: baseLat + 0.0035,
-        longitude: baseLng - 0.0042,
-        location_name: 'Blue Bottle Coffee, SOMA',
-        notes: 'Espresso and morning croissant.',
-        user_id: 1
-      },
-      {
-        title: 'Safeway Groceries',
-        amount: 84.20,
-        type: 'expense',
-        date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Food & Dining'),
-        latitude: baseLat - 0.0084,
-        longitude: baseLng + 0.0092,
-        location_name: 'Safeway, Market St',
-        notes: 'Weekly groceries replenishment.',
-        user_id: 1
-      },
-      {
-        title: 'Monthly Rent',
-        amount: 2200.00,
-        type: 'expense',
-        date: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Housing & Rent'),
-        latitude: baseLat,
-        longitude: baseLng,
-        location_name: 'Mission District Apartments',
-        notes: 'May Rent payment.',
-        user_id: 1
-      },
-      {
-        title: 'Bi-Weekly Paycheck',
-        amount: 3200.00,
-        type: 'income',
-        date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Salary & Income'),
-        latitude: baseLat + 0.012,
-        longitude: baseLng - 0.008,
-        location_name: 'TechCorp Headquarters, Downtown SF',
-        notes: 'Regular salary deposit.',
-        user_id: 1
-      },
-      {
-        title: 'Shell Gas Station',
-        amount: 45.60,
-        type: 'expense',
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Transport'),
-        latitude: baseLat - 0.0062,
-        longitude: baseLng - 0.0112,
-        location_name: 'Shell Fuel Station, Potrero Hill',
-        notes: 'Filled up the tank.',
-        user_id: 1
-      },
-      {
-        title: 'Equinox Fitness Club',
-        amount: 150.00,
-        type: 'expense',
-        date: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Health & Gym'),
-        latitude: baseLat + 0.0055,
-        longitude: baseLng - 0.0025,
-        location_name: 'Equinox Gym, Union St',
-        notes: 'Monthly membership dues.',
-        user_id: 1
-      },
-      {
-        title: 'CVS Pharmacy',
-        amount: 22.40,
-        type: 'expense',
-        date: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Health & Gym'),
-        latitude: baseLat + 0.0022,
-        longitude: baseLng + 0.0035,
-        location_name: 'CVS, SOMA',
-        notes: 'Vitamins and medicine.',
-        user_id: 1
-      },
-      {
-        title: 'Dolores Park Cafe',
-        amount: 19.50,
-        type: 'expense',
-        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Food & Dining'),
-        latitude: baseLat - 0.0145,
-        longitude: baseLng - 0.0078,
-        location_name: 'Dolores Park Cafe, Mission St',
-        notes: 'Brunch with friends.',
-        user_id: 1
-      },
-      {
-        title: 'Uber Ride',
-        amount: 18.25,
-        type: 'expense',
-        date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Transport'),
-        latitude: baseLat + 0.0095,
-        longitude: baseLng - 0.0155,
-        location_name: 'Marina District Pick-up',
-        notes: 'Late night rideshare home.',
-        user_id: 1
-      },
-      {
-        title: 'AMC Metreon Theater',
-        amount: 32.00,
-        type: 'expense',
-        date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Entertainment'),
-        latitude: baseLat + 0.0048,
-        longitude: baseLng - 0.0031,
-        location_name: 'AMC Metreon, Mission St',
-        notes: 'Movie night: tickets and popcorn.',
-        user_id: 1
-      },
-      {
-        title: 'Apple Store purchase',
-        amount: 129.00,
-        type: 'expense',
-        date: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Shopping'),
-        latitude: baseLat + 0.0075,
-        longitude: baseLng - 0.0055,
-        location_name: 'Apple Store, Union Square',
-        notes: 'New MagSafe battery pack.',
-        user_id: 1
-      },
-      {
-        title: 'Pacific Gas & Electric',
-        amount: 98.40,
-        type: 'expense',
-        date: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Utilities'),
-        latitude: baseLat + 0.0185,
-        longitude: baseLng - 0.0012,
-        location_name: 'PG&E SF Corporate Center',
-        notes: 'Electricity and heating bill.',
-        user_id: 1
-      },
-      // Investments linked to Goals
-      {
-        title: 'Europe Fund Allocation',
-        amount: 500.00,
-        type: 'investment',
-        date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Investments'),
-        latitude: baseLat + 0.002,
-        longitude: baseLng - 0.002,
-        location_name: 'Charles Schwab Digital Platform',
-        notes: 'Monthly savings auto-transferred to Travel goals.',
-        user_id: 1
-      },
-      {
-        title: 'Tesla Target Savings',
-        amount: 1000.00,
-        type: 'investment',
-        date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Investments'),
-        latitude: baseLat + 0.002,
-        longitude: baseLng - 0.002,
-        location_name: 'Fidelity Brokerage Account',
-        notes: 'Allocating index fund gains to Tesla deposit.',
-        user_id: 1
-      },
-      {
-        title: 'Emergency Cache Deposit',
-        amount: 800.00,
-        type: 'investment',
-        date: new Date(Date.now() - 22 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Investments'),
-        latitude: baseLat + 0.002,
-        longitude: baseLng - 0.002,
-        location_name: 'Ally High-Yield Savings Account',
-        notes: 'Safety net growth addition.',
-        user_id: 1
-      },
-      {
-        title: 'Europe Bonus Deposit',
-        amount: 250.00,
-        type: 'investment',
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        category_id: getCatId('Investments'),
-        latitude: baseLat + 0.002,
-        longitude: baseLng - 0.002,
-        location_name: 'Charles Schwab Digital Platform',
-        notes: 'Additional transfer for Europe fund.',
-        user_id: 1
-      }
-    ];
-
-    // Insert mock transactions
-    await db('transactions').insert(mockTransactions);
-    console.log('Mock geographical transactions seeded.');
-
-    // Fetch goals and newly inserted transactions to establish mappings
-    const seededGoals = await db('goals').select('id', 'name');
-    const seededTx = await db('transactions').select('id', 'title', 'amount', 'date');
-
-    const getGoalId = (name) => seededGoals.find((g) => g.name === name).id;
-    const getTxId = (title) => seededTx.find((t) => t.title === title).id;
-
-    // Create Goal investment mappings
-    const mockInvestments = [
-      {
-        transaction_id: getTxId('Europe Fund Allocation'),
-        goal_id: getGoalId('Europe Vacation Fund'),
-        allocated_amount: 500.00,
-        allocated_date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        transaction_id: getTxId('Tesla Target Savings'),
-        goal_id: getGoalId('Tesla Model 3 Deposit'),
-        allocated_amount: 1000.00,
-        allocated_date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        transaction_id: getTxId('Emergency Cache Deposit'),
-        goal_id: getGoalId('Emergency Nest Egg'),
-        allocated_amount: 800.00,
-        allocated_date: new Date(Date.now() - 22 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        transaction_id: getTxId('Europe Bonus Deposit'),
-        goal_id: getGoalId('Europe Vacation Fund'),
-        allocated_amount: 250.00,
-        allocated_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-      }
-    ];
-
-    await db('investments').insert(mockInvestments);
-    console.log('Mock investments seeded and linked to savings goals.');
-
-    // Update goal current_amounts
-    for (const goal of seededGoals) {
-      const sumResult = await db('investments')
-        .where('goal_id', goal.id)
-        .sum('allocated_amount as total')
-        .first();
-      const totalAllocated = parseFloat(sumResult.total) || 0;
-      await db('goals').where('id', goal.id).update({ current_amount: totalAllocated });
+  // Skip demo user/goals/transactions/investments in production —
+  // they reference a hardcoded user_id: 1 that won't exist in prod.
+  if (environment !== 'production') {
+    // Seed Default User if empty
+    const userCount = await db('users').count('id as count').first();
+    if (parseInt(userCount.count) === 0) {
+      await db('users').insert({
+        id: 1,
+        phone_number: '+1234567890',
+        name: 'Nikhil Rachawar'
+      });
+      console.log('Default user "+1234567890" seeded.');
     }
-    console.log('Goal current accumulated balances calculated & updated.');
+
+    // Seed Goals if empty
+    const goalCount = await db('goals').count('id as count').first();
+    if (parseInt(goalCount.count) === 0) {
+      const defaultGoals = [
+        {
+          name: 'Europe Vacation Fund',
+          target_amount: 6000.00,
+          current_amount: 0,
+          target_date: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+          color: '#8B5CF6',
+          icon: 'plane',
+          user_id: 1
+        },
+        {
+          name: 'Tesla Model 3 Deposit',
+          target_amount: 15000.00,
+          current_amount: 0,
+          target_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          color: '#6366F1',
+          icon: 'zap',
+          user_id: 1
+        },
+        {
+          name: 'Emergency Nest Egg',
+          target_amount: 10000.00,
+          current_amount: 0,
+          target_date: new Date(Date.now() + 500 * 24 * 60 * 60 * 1000).toISOString(),
+          color: '#10B981',
+          icon: 'shield',
+          user_id: 1
+        }
+      ];
+      await db('goals').insert(defaultGoals);
+      console.log('Default savings goals seeded.');
+    }
+
+    // Seed Transactions and Investments if empty
+    const transactionCount = await db('transactions').count('id as count').first();
+    if (parseInt(transactionCount.count) === 0) {
+      const cats = await db('categories').select('id', 'name');
+      const getCatId = (name) => cats.find((c) => c.name === name).id;
+
+      const baseLat = 37.7749;
+      const baseLng = -122.4194;
+
+      const mockTransactions = [
+        { title: 'Blue Bottle Coffee', amount: 8.50, type: 'expense', date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Food & Dining'), latitude: baseLat + 0.0035, longitude: baseLng - 0.0042, location_name: 'Blue Bottle Coffee, SOMA', notes: 'Espresso and morning croissant.', user_id: 1 },
+        { title: 'Safeway Groceries', amount: 84.20, type: 'expense', date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Food & Dining'), latitude: baseLat - 0.0084, longitude: baseLng + 0.0092, location_name: 'Safeway, Market St', notes: 'Weekly groceries replenishment.', user_id: 1 },
+        { title: 'Monthly Rent', amount: 2200.00, type: 'expense', date: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Housing & Rent'), latitude: baseLat, longitude: baseLng, location_name: 'Mission District Apartments', notes: 'May Rent payment.', user_id: 1 },
+        { title: 'Bi-Weekly Paycheck', amount: 3200.00, type: 'income', date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Salary & Income'), latitude: baseLat + 0.012, longitude: baseLng - 0.008, location_name: 'TechCorp Headquarters, Downtown SF', notes: 'Regular salary deposit.', user_id: 1 },
+        { title: 'Shell Gas Station', amount: 45.60, type: 'expense', date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Transport'), latitude: baseLat - 0.0062, longitude: baseLng - 0.0112, location_name: 'Shell Fuel Station, Potrero Hill', notes: 'Filled up the tank.', user_id: 1 },
+        { title: 'Equinox Fitness Club', amount: 150.00, type: 'expense', date: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Health & Gym'), latitude: baseLat + 0.0055, longitude: baseLng - 0.0025, location_name: 'Equinox Gym, Union St', notes: 'Monthly membership dues.', user_id: 1 },
+        { title: 'CVS Pharmacy', amount: 22.40, type: 'expense', date: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Health & Gym'), latitude: baseLat + 0.0022, longitude: baseLng + 0.0035, location_name: 'CVS, SOMA', notes: 'Vitamins and medicine.', user_id: 1 },
+        { title: 'Dolores Park Cafe', amount: 19.50, type: 'expense', date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Food & Dining'), latitude: baseLat - 0.0145, longitude: baseLng - 0.0078, location_name: 'Dolores Park Cafe, Mission St', notes: 'Brunch with friends.', user_id: 1 },
+        { title: 'Uber Ride', amount: 18.25, type: 'expense', date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Transport'), latitude: baseLat + 0.0095, longitude: baseLng - 0.0155, location_name: 'Marina District Pick-up', notes: 'Late night rideshare home.', user_id: 1 },
+        { title: 'AMC Metreon Theater', amount: 32.00, type: 'expense', date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Entertainment'), latitude: baseLat + 0.0048, longitude: baseLng - 0.0031, location_name: 'AMC Metreon, Mission St', notes: 'Movie night: tickets and popcorn.', user_id: 1 },
+        { title: 'Apple Store purchase', amount: 129.00, type: 'expense', date: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Shopping'), latitude: baseLat + 0.0075, longitude: baseLng - 0.0055, location_name: 'Apple Store, Union Square', notes: 'New MagSafe battery pack.', user_id: 1 },
+        { title: 'Pacific Gas & Electric', amount: 98.40, type: 'expense', date: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Utilities'), latitude: baseLat + 0.0185, longitude: baseLng - 0.0012, location_name: 'PG&E SF Corporate Center', notes: 'Electricity and heating bill.', user_id: 1 },
+        { title: 'Europe Fund Allocation', amount: 500.00, type: 'investment', date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Investments'), latitude: baseLat + 0.002, longitude: baseLng - 0.002, location_name: 'Charles Schwab Digital Platform', notes: 'Monthly savings auto-transferred to Travel goals.', user_id: 1 },
+        { title: 'Tesla Target Savings', amount: 1000.00, type: 'investment', date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Investments'), latitude: baseLat + 0.002, longitude: baseLng - 0.002, location_name: 'Fidelity Brokerage Account', notes: 'Allocating index fund gains to Tesla deposit.', user_id: 1 },
+        { title: 'Emergency Cache Deposit', amount: 800.00, type: 'investment', date: new Date(Date.now() - 22 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Investments'), latitude: baseLat + 0.002, longitude: baseLng - 0.002, location_name: 'Ally High-Yield Savings Account', notes: 'Safety net growth addition.', user_id: 1 },
+        { title: 'Europe Bonus Deposit', amount: 250.00, type: 'investment', date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), category_id: getCatId('Investments'), latitude: baseLat + 0.002, longitude: baseLng - 0.002, location_name: 'Charles Schwab Digital Platform', notes: 'Additional transfer for Europe fund.', user_id: 1 }
+      ];
+
+      await db('transactions').insert(mockTransactions);
+      console.log('Mock geographical transactions seeded.');
+
+      const seededGoals = await db('goals').select('id', 'name');
+      const seededTx = await db('transactions').select('id', 'title', 'amount', 'date');
+      const getGoalId = (name) => seededGoals.find((g) => g.name === name).id;
+      const getTxId = (title) => seededTx.find((t) => t.title === title).id;
+
+      const mockInvestments = [
+        { transaction_id: getTxId('Europe Fund Allocation'), goal_id: getGoalId('Europe Vacation Fund'), allocated_amount: 500.00, allocated_date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
+        { transaction_id: getTxId('Tesla Target Savings'), goal_id: getGoalId('Tesla Model 3 Deposit'), allocated_amount: 1000.00, allocated_date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString() },
+        { transaction_id: getTxId('Emergency Cache Deposit'), goal_id: getGoalId('Emergency Nest Egg'), allocated_amount: 800.00, allocated_date: new Date(Date.now() - 22 * 24 * 60 * 60 * 1000).toISOString() },
+        { transaction_id: getTxId('Europe Bonus Deposit'), goal_id: getGoalId('Europe Vacation Fund'), allocated_amount: 250.00, allocated_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() }
+      ];
+
+      await db('investments').insert(mockInvestments);
+      console.log('Mock investments seeded and linked to savings goals.');
+
+      for (const goal of seededGoals) {
+        const sumResult = await db('investments')
+          .where('goal_id', goal.id)
+          .sum('allocated_amount as total')
+          .first();
+        const totalAllocated = parseFloat(sumResult.total) || 0;
+        await db('goals').where('id', goal.id).update({ current_amount: totalAllocated });
+      }
+      console.log('Goal current accumulated balances calculated & updated.');
+    }
+  } else {
+    console.log('Production environment — skipping demo seed data.');
   }
 
   // Postgres sequences get out of sync when we manually insert hardcoded IDs during seeding.
-  // We must reset the auto-increment sequences to the MAX(id) of each table.
   if (activeConfig.client === 'pg') {
     const tables = ['users', 'categories', 'transactions', 'goals', 'investments'];
     for (const table of tables) {
