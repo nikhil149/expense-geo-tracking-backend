@@ -60,16 +60,36 @@ if (process.env.NODE_ENV !== 'production' && !process.env.LAMBDA_TASK_ROOT) {
 }
 
 // For AWS Lambda, we export the wrapped app.
-// Note: We call initDb() inside the Lambda handler implicitly by the time the first request hits, 
-// but serverless-http handles the cold start beautifully.
-// To ensure DB is ready, we'll wrap the handler.
 let dbInitialized = false;
+let dbInitError = null;
 const wrappedApp = serverless(app);
+
+// Diagnostic endpoint to check DB status from production
+app.get('/api/debug/status', (req, res) => {
+  res.json({
+    dbInitialized,
+    dbInitError: dbInitError ? dbInitError.message : null,
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      DATABASE_URL: process.env.DATABASE_URL ? '***SET***' : '***MISSING***',
+      JWT_SECRET: process.env.JWT_SECRET ? '***SET***' : '***MISSING***',
+      SMS_PROVIDER: process.env.SMS_PROVIDER || '***MISSING***',
+    }
+  });
+});
 
 module.exports.handler = async (event, context) => {
   if (!dbInitialized) {
-    await initDb();
-    dbInitialized = true;
+    try {
+      console.log('[Lambda] Cold start — initializing database...');
+      await initDb();
+      dbInitialized = true;
+      console.log('[Lambda] Database initialized successfully.');
+    } catch (err) {
+      console.error('[Lambda] CRITICAL: initDb() failed:', err);
+      dbInitError = err;
+      // Still allow the request through so the debug endpoint works
+    }
   }
   return wrappedApp(event, context);
 };
