@@ -39,4 +39,5 @@ jobs:
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_VERIFY_SERVICE_SID: ${{ secrets.TWILIO_VERIFY_SERVICE_SID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npx serverless@3 deploy --stage production
