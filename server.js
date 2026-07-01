@@ -45,6 +45,11 @@ const serverless = require('serverless-http');
 async function startLocalServer() {
   try {
     await initDb();
+    
+    // Initialize scheduled cron jobs
+    const { initSmsCronJobs } = require('./src/workers/smsBatchCron');
+    initSmsCronJobs();
+
     app.listen(PORT, () => {
       console.log(`=================================================`);
       console.log(`  Geo-Finance API running on: http://localhost:${PORT}`);

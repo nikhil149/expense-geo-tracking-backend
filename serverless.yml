@@ -40,6 +40,16 @@ functions:
           arn: !GetAtt SmsQueue.Arn
           batchSize: 10
 
+  smsBatchCron:
+    handler: src/workers/smsBatchCron.handler
+    timeout: 60
+    memorySize: 512
+    events:
+      # 3:00 PM IST is 9:30 AM UTC -> cron(30 9 * * ? *)
+      - schedule: cron(30 9 * * ? *)
+      # 9:00 PM IST is 3:30 PM UTC -> cron(30 15 * * ? *)
+      - schedule: cron(30 15 * * ? *)
+
 resources:
   Resources:
     SmsQueue:

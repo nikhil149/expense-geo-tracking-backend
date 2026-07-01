@@ -69,6 +69,67 @@ async function parseSmsWithAI(rawText) {
   }
 }
 
+/**
+ * Parses an array of raw bank SMS into structured transaction data using Gemini.
+ * @param {Array<{id: number, text: string}>} smsArray Array of SMS objects
+ * @returns {Promise<Array<Object>>} Array of parsed transactions
+ */
+async function parseBulkSmsWithAI(smsArray) {
+  if (!ai) throw new Error('GEMINI_API_KEY environment variable is missing.');
+  if (!smsArray || smsArray.length === 0) return [];
+
+  const smsListString = smsArray.map((sms, index) => `[ID: ${sms.id}] ${sms.text}`).join('\n');
+
+  const prompt = `
+    You are an expert financial assistant. Parse the following list of SMS notifications.
+    For each SMS, extract the transaction details exactly as requested.
+    - Extract the transaction amount.
+    - Determine if it's an 'expense' (debited/sent) or 'income' (credited/received). Note: Investments MUST be strictly classified as 'expense'.
+    - Extract the clean merchant name.
+    - Classify the transaction into ONE of the following exact categories: 'Food & Dining', 'Transport', 'Housing & Rent', 'Utilities', 'Entertainment', 'Health & Gym', 'Shopping', 'Salary & Income', 'Investments', or 'Other'.
+    - Determine the payment method ('credit_card', 'debit_card', 'upi', 'net_banking', 'wallet', 'unknown').
+    - If you cannot confidently determine the transaction details, set isValid to false.
+    
+    Here are the SMS messages:
+    ${smsListString}
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.INTEGER, description: "The ID of the SMS provided in the prompt." },
+              isValid: { type: Type.BOOLEAN },
+              amount: { type: Type.NUMBER },
+              type: { type: Type.STRING, enum: ['expense', 'income'] },
+              merchantName: { type: Type.STRING },
+              aiCategory: { type: Type.STRING, enum: ['Food & Dining', 'Transport', 'Housing & Rent', 'Utilities', 'Entertainment', 'Health & Gym', 'Shopping', 'Salary & Income', 'Investments', 'Other'] },
+              paymentMethod: { type: Type.STRING, enum: ['credit_card', 'debit_card', 'upi', 'net_banking', 'wallet', 'unknown'] },
+              cardName: { type: Type.STRING }
+            },
+            required: ["id", "isValid"]
+          }
+        }
+      }
+    });
+
+    const resultText = response.text;
+    if (!resultText) return [];
+    return JSON.parse(resultText);
+  } catch (error) {
+    console.error('[AI_SMS_SERVICE] Failed to bulk parse SMS with Gemini:', error);
+    throw error;
+  }
+}
+
 module.exports = {
-  parseSmsWithAI
+  parseSmsWithAI,
+  parseBulkSmsWithAI
 };

@@ -148,6 +148,24 @@ async function initDb() {
     console.log('Table "ai_usage_limits" created successfully.');
   }
 
+  // 8. Create PENDING SMS Table
+  const hasPendingSms = await db.schema.hasTable('pending_sms');
+  if (!hasPendingSms) {
+    await db.schema.createTable('pending_sms', (table) => {
+      table.increments('id').primary();
+      table.integer('user_id').unsigned().notNullable()
+        .references('id').inTable('users').onDelete('CASCADE');
+      table.text('raw_text').notNullable();
+      table.string('source_app');
+      table.decimal('latitude', 10, 8);
+      table.decimal('longitude', 11, 8);
+      table.string('location_name');
+      table.boolean('processed').defaultTo(false);
+      table.timestamps(true, true);
+    });
+    console.log('Table "pending_sms" created successfully.');
+  }
+
   // --- Seed Data ---
 
   // Seed Default Categories if empty (needed in ALL environments)

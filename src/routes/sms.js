@@ -31,6 +31,36 @@ router.post('/raw', async (req, res) => {
     timestamp: new Date().toISOString()
   };
 
+  try {
+    // Check AI Limit for today
+    const today = new Date().toISOString().split('T')[0];
+    let usage = await db('ai_usage_limits')
+      .where({ user_id: userId, date: today })
+      .first();
+
+    if (usage && usage.request_count >= 50) {
+      console.log(`[SMS_API] User ${userId} exceeded daily limit of 50. Queuing in pending_sms...`);
+      await db('pending_sms').insert({
+        user_id: userId,
+        raw_text,
+        source_app,
+        latitude,
+        longitude,
+        location_name
+      });
+      return res.status(202).json({ message: 'Daily limit reached. SMS queued for batch processing.' });
+    }
+
+    // Increment usage since we are going to process it
+    if (usage) {
+      await db('ai_usage_limits').where({ id: usage.id }).increment('request_count', 1);
+    } else {
+      await db('ai_usage_limits').insert({ user_id: userId, date: today, request_count: 1 });
+    }
+  } catch (dbErr) {
+    console.error('[SMS_API] DB Error checking limits:', dbErr);
+  }
+
   // If local dev environment, process immediately without SQS
   if (process.env.NODE_ENV !== 'production') {
     try {
