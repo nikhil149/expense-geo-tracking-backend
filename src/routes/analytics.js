@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../db/db');
+const { generateSpendingInsight } = require('../services/aiInsightService');
+const { generateGoalSuggestion } = require('../services/aiGoalService');
+const { checkAILimit } = require('../middleware/aiRateLimiter');
 
 // GET spending grouped by category (for pie charts & bar graphs)
 router.get('/spending-by-category', async (req, res) => {
@@ -155,6 +158,101 @@ router.get('/spending-by-region', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// GET AI Spending Insight (Generates conversational summary)
+router.get('/ai-insights', checkAILimit, async (req, res) => {
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const spendingData = await db('transactions')
+      .where('transactions.user_id', req.user.id)
+      .andWhere('transactions.type', 'expense')
+      .andWhere('transactions.date', '>=', monthStart)
+      .join('categories', 'transactions.category_id', 'categories.id')
+      .select('categories.name as category')
+      .sum('transactions.amount as total')
+      .groupBy('categories.id')
+      .orderBy('total', 'desc');
+
+    if (spendingData.length === 0) {
+      return res.json({
+        summary: "You haven't logged any expenses this month yet!",
+        tip: "Log your first transaction to get personalized AI insights."
+      });
+    }
+
+    // Format data for AI prompt
+    const formattedData = {};
+    spendingData.forEach(row => {
+      formattedData[row.category] = parseFloat(row.total);
+    });
+
+    const insight = await generateSpendingInsight(formattedData);
+    
+    if (!insight) {
+      return res.status(500).json({ error: 'Failed to generate AI insight.' });
+    }
+
+    res.json(insight);
+  } catch (error) {
+    console.error('Error generating AI insight:', error);
+    let friendlyMessage = 'Failed to generate AI insight. Please try again later.';
+    if (error.status === 503) {
+      friendlyMessage = 'The AI service is currently experiencing high demand. Please try again later.';
+    } else if (error.status === 429) {
+      friendlyMessage = 'The AI service has reached its quota limit. Please try again later.';
+    }
+    res.status(500).json({ error: friendlyMessage });
+  }
+});
+
+// GET AI Goal Suggestion based on all-time finances
+router.get('/ai-goal-suggestion', checkAILimit, async (req, res) => {
+  try {
+    // Get all-time income and expense
+    const totals = await db('transactions')
+      .where('user_id', req.user.id)
+      .select('type')
+      .sum('amount as total')
+      .groupBy('type');
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+    totals.forEach(t => {
+      if (t.type === 'income') totalIncome = parseFloat(t.total) || 0;
+      if (t.type === 'expense') totalExpense = parseFloat(t.total) || 0;
+    });
+
+    // Get active goals
+    const goals = await db('goals')
+      .where('user_id', req.user.id)
+      .select('name as title', 'target_amount');
+
+    const financialData = {
+      totalIncome,
+      totalExpense,
+      activeGoals: goals
+    };
+
+    const suggestion = await generateGoalSuggestion(financialData);
+    
+    if (!suggestion) {
+      return res.status(500).json({ error: 'Failed to generate goal suggestion.' });
+    }
+
+    res.json(suggestion);
+  } catch (error) {
+    console.error('Error generating AI goal suggestion:', error);
+    let friendlyMessage = 'Failed to generate AI goal suggestion. Please try again later.';
+    if (error.status === 503) {
+      friendlyMessage = 'The AI service is currently experiencing high demand. Please try again later.';
+    } else if (error.status === 429) {
+      friendlyMessage = 'The AI service has reached its quota limit. Please try again later.';
+    }
+    res.status(500).json({ error: friendlyMessage });
   }
 });
 

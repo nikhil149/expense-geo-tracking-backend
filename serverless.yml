@@ -12,6 +12,16 @@ provider:
     TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID, ''}
     TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN, ''}
     TWILIO_VERIFY_SERVICE_SID: ${env:TWILIO_VERIFY_SERVICE_SID, ''}
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
+    SQS_SMS_QUEUE_URL: !Ref SmsQueue
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !GetAtt SmsQueue.Arn
 
 functions:
   api:
@@ -20,3 +30,19 @@ functions:
     memorySize: 512
     events:
       - httpApi: '*'
+
+  aiSmsWorker:
+    handler: src/workers/aiSmsWorker.handler
+    timeout: 30
+    memorySize: 512
+    events:
+      - sqs:
+          arn: !GetAtt SmsQueue.Arn
+          batchSize: 10
+
+resources:
+  Resources:
+    SmsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: GeoFinanceSmsQueue-${sls:stage}

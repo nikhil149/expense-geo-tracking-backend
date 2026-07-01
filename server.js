@@ -9,6 +9,7 @@ const categoriesRouter = require('./src/routes/categories');
 const transactionsRouter = require('./src/routes/transactions');
 const goalsRouter = require('./src/routes/goals');
 const analyticsRouter = require('./src/routes/analytics');
+const smsRouter = require('./src/routes/sms');
 const { requireAuth } = require('./src/middleware/auth');
 
 const app = express();
@@ -24,6 +25,7 @@ app.use('/api/categories', requireAuth, categoriesRouter);
 app.use('/api/transactions', requireAuth, transactionsRouter);
 app.use('/api/goals', requireAuth, goalsRouter);
 app.use('/api/analytics', requireAuth, analyticsRouter);
+app.use('/api/sms', requireAuth, smsRouter);
 
 // Health Checks
 app.get('/', (req, res) => res.send('OK'));

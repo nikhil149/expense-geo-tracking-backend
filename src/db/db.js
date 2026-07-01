@@ -133,6 +133,21 @@ async function initDb() {
     console.log('Table "otps" created successfully.');
   }
 
+  // 7. Create AI Usage Limits Table
+  const hasAiLimits = await db.schema.hasTable('ai_usage_limits');
+  if (!hasAiLimits) {
+    await db.schema.createTable('ai_usage_limits', (table) => {
+      table.increments('id').primary();
+      table.integer('user_id').unsigned().notNullable()
+        .references('id').inTable('users').onDelete('CASCADE');
+      table.string('date').notNullable(); // YYYY-MM-DD
+      table.integer('request_count').defaultTo(0).notNullable();
+      table.timestamps(true, true);
+      table.unique(['user_id', 'date']);
+    });
+    console.log('Table "ai_usage_limits" created successfully.');
+  }
+
   // --- Seed Data ---
 
   // Seed Default Categories if empty (needed in ALL environments)
@@ -265,7 +280,7 @@ async function initDb() {
 
   // Postgres sequences get out of sync when we manually insert hardcoded IDs during seeding.
   if (activeConfig.client === 'pg') {
-    const tables = ['users', 'categories', 'transactions', 'goals', 'investments'];
+    const tables = ['users', 'categories', 'transactions', 'goals', 'investments', 'ai_usage_limits'];
     for (const table of tables) {
       try {
         await db.raw(`SELECT setval('${table}_id_seq', COALESCE((SELECT MAX(id) + 1 FROM ${table}), 1), false)`);
