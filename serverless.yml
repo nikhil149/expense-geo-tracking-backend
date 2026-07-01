@@ -16,5 +16,7 @@ provider:
 functions:
   api:
     handler: server.handler
+    timeout: 30
+    memorySize: 512
     events:
       - httpApi: '*'
