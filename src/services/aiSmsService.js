@@ -19,14 +19,12 @@ async function parseSmsWithAI(rawText) {
   }
 
   const prompt = `
-    You are an expert financial SMS parser. Extract the transaction details from the following bank SMS.
-    
-    Rules:
-    - Determine if it's an 'expense', 'income', or 'investment' (e.g. mutual funds, SIPs, broker deposits).
-    - Extract the exact amount as a number.
+    You are an expert financial assistant. Parse this SMS notification from a bank or wallet.
+    - Extract the transaction amount.
+    - Determine if it's an 'expense' (debited/sent) or 'income' (credited/received). Note: Investments (like mutual funds, brokerages, NACH SIPs) MUST be strictly classified as 'expense' type, since they are money leaving the checking account.
     - Extract the clean merchant name (e.g., "AMAZON PAY", "Starbucks", "Youtube"). Remove prefixes like "Merchant" or "ACH".
     - Classify the transaction into ONE of the following exact categories: 'Food & Dining', 'Transport', 'Housing & Rent', 'Utilities', 'Entertainment', 'Health & Gym', 'Shopping', 'Salary & Income', 'Investments', or 'Other'.
-    - CRITICAL RULE: Any SMS mentioning "NACH Debit" or "NACH Credit" MUST be classified as the category 'Investments' and type 'investment'.
+    - CRITICAL RULE: Any SMS mentioning "NACH Debit" or "NACH Credit" MUST be classified as the category 'Investments' and type 'expense'.
     - Determine the payment method ('credit_card', 'debit_card', 'upi', 'net_banking', 'wallet', 'unknown').
     - If you cannot confidently determine the transaction details or it is not a transaction (e.g., OTP, reminder, upcoming due date), return an empty object or null fields.
 
@@ -47,7 +45,7 @@ async function parseSmsWithAI(rawText) {
               description: "True if this is a valid executed transaction. False if it's an OTP, reminder, or non-transaction."
             },
             amount: { type: Type.NUMBER },
-            type: { type: Type.STRING, enum: ['expense', 'income', 'investment'] },
+            type: { type: Type.STRING, enum: ['expense', 'income'] },
             merchantName: { type: Type.STRING },
             aiCategory: { type: Type.STRING, enum: ['Food & Dining', 'Transport', 'Housing & Rent', 'Utilities', 'Entertainment', 'Health & Gym', 'Shopping', 'Salary & Income', 'Investments', 'Other'] },
             paymentMethod: { type: Type.STRING, enum: ['credit_card', 'debit_card', 'upi', 'net_banking', 'wallet', 'unknown'] },

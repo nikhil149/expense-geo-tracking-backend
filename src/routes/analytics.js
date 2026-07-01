@@ -75,18 +75,24 @@ router.get('/summary', async (req, res) => {
       .sum('amount as total')
       .groupBy('type');
 
+    const investmentAggregate = await db('transactions')
+      .join('categories', 'transactions.category_id', 'categories.id')
+      .where('transactions.user_id', req.user.id)
+      .andWhere('categories.name', 'Investments')
+      .sum('transactions.amount as total')
+      .first();
+
     let totalIncome = 0;
     let totalExpense = 0;
-    let totalInvestment = 0;
+    let totalInvestment = parseFloat(investmentAggregate?.total || 0);
 
     aggregates.forEach((row) => {
       const val = parseFloat(row.total) || 0;
       if (row.type === 'income') totalIncome = val;
       if (row.type === 'expense') totalExpense = val;
-      if (row.type === 'investment') totalInvestment = val;
     });
 
-    const netSavings = totalIncome - totalExpense - totalInvestment;
+    const netSavings = totalIncome - totalExpense;
 
     res.json({
       totalIncome,
